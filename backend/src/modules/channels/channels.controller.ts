@@ -123,6 +123,12 @@ export async function getStream(req: AuthRequest, res: Response) {
       streamUrlBackup: channel.streamUrlBackup,
       name: channel.name,
       quality: channel.quality,
+      qualities: {
+        SD: channel.streamUrlSD || null,
+        HD: channel.streamUrlHD || null,
+        FHD: channel.streamUrlFHD || null,
+      },
+      defaultQuality: channel.defaultQuality,
     });
   } catch (err) {
     return error(res, 'Error al obtener stream', 500);

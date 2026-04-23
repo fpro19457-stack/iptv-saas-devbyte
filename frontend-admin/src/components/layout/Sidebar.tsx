@@ -8,6 +8,7 @@ import {
   Bell,
   LogOut,
   X,
+  Activity,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -17,6 +18,7 @@ const navItems = [
   { to: '/channels', icon: Tv, label: 'Canales' },
   { to: '/packs', icon: Package, label: 'Packs' },
   { to: '/sessions', icon: Monitor, label: 'Sesiones' },
+  { to: '/monitor', icon: Activity, label: 'Monitor' },
   { to: '/notifications', icon: Bell, label: 'Notificaciones' },
 ];
 

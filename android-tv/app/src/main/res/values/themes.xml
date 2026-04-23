@@ -1,0 +1,4 @@
+<resources>
+
+    <style name="Theme.IPTVDevByte" parent="Theme.AppCompat.DayNight.NoActionBar" />
+</resources>

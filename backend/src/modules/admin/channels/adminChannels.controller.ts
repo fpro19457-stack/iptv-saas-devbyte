@@ -3,6 +3,7 @@ import { body, param, query } from 'express-validator';
 import prisma from '../../../config/database';
 import { success, error } from '../../../utils/response';
 import { validate } from '../../../middlewares/validate';
+import { cache } from '../../../utils/cache';
 
 export const listValidation = [
   query('page').optional().isInt().withMessage('Page debe ser un número'),
@@ -85,6 +86,8 @@ export async function createChannel(req: Request, res: Response) {
       },
     });
 
+    cache.invalidatePattern('channels:');
+
     return success(res, channel, 'Canal creado', 201);
   } catch (err) {
     return error(res, 'Error al crear canal', 500);
@@ -94,7 +97,7 @@ export async function createChannel(req: Request, res: Response) {
 export async function updateChannel(req: Request, res: Response) {
   try {
     const { id } = req.params;
-    const { number, name, logoUrl, streamUrl, streamUrlBackup, category, isAdult, quality, isActive } = req.body;
+    const { number, name, logoUrl, streamUrl, streamUrlBackup, category, isAdult, quality, isActive, streamUrlSD, streamUrlHD, streamUrlFHD, defaultQuality } = req.body;
 
     const channel = await prisma.channel.update({
       where: { id },
@@ -108,8 +111,14 @@ export async function updateChannel(req: Request, res: Response) {
         ...(isAdult !== undefined && { isAdult }),
         ...(quality !== undefined && { quality }),
         ...(isActive !== undefined && { isActive }),
+        ...(streamUrlSD !== undefined && { streamUrlSD }),
+        ...(streamUrlHD !== undefined && { streamUrlHD }),
+        ...(streamUrlFHD !== undefined && { streamUrlFHD }),
+        ...(defaultQuality !== undefined && { defaultQuality }),
       },
     });
+
+    cache.invalidatePattern('channels:');
 
     return success(res, channel, 'Canal actualizado');
   } catch (err) {
@@ -132,6 +141,8 @@ export async function deleteChannel(req: Request, res: Response) {
       await prisma.channel.delete({ where: { id } });
     }
 
+    cache.invalidatePattern('channels:');
+
     return success(res, null, 'Canal eliminado');
   } catch (err) {
     return error(res, 'Error al eliminar canal', 500);
@@ -152,6 +163,8 @@ export async function toggleChannel(req: Request, res: Response) {
       data: { isActive: !channel.isActive },
     });
 
+    cache.invalidatePattern('channels:');
+
     return success(res, updated, updated.isActive ? 'Canal activado' : 'Canal desactivado');
   } catch (err) {
     return error(res, 'Error al cambiar estado', 500);
@@ -170,6 +183,8 @@ export async function reorderChannels(req: Request, res: Response) {
         })
       )
     );
+
+    cache.invalidatePattern('channels:');
 
     return success(res, null, 'Canales reordenados');
   } catch (err) {
@@ -277,6 +292,8 @@ export async function importM3u(req: Request, res: Response) {
 
     await prisma.channel.createMany({ data: toCreate });
 
+    cache.invalidatePattern('channels:');
+
     return success(res, { imported: toCreate.length }, `${toCreate.length} canales importados`);
   } catch (err) {
     console.error('M3U import error:', err);
@@ -295,6 +312,8 @@ export async function bulkDeleteChannels(req: Request, res: Response) {
     await prisma.channel.deleteMany({
       where: { id: { in: ids } },
     });
+
+    cache.invalidatePattern('channels:');
 
     return success(res, { deleted: ids.length }, `${ids.length} canales eliminados`);
   } catch (err) {

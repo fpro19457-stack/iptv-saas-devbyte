@@ -38,6 +38,10 @@ export function verifyAccessToken(token: string): TokenPayload | null {
   return verifyToken(token, process.env.JWT_SECRET!) as TokenPayload | null;
 }
 
+export function verifyAdminToken(token: string): AdminPayload | null {
+  return verifyToken(token, process.env.JWT_SECRET!) as AdminPayload | null;
+}
+
 export function verifyRefreshToken(token: string): { userId: string } | null {
   try {
     const payload = jwt.verify(token, process.env.JWT_REFRESH_SECRET!) as { userId: string };

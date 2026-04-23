@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Search, Edit, Trash2, Eye, X, Check } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Eye, X, Check, Tv } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
@@ -43,6 +43,10 @@ export function Users() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [formData, setFormData] = useState<UserFormData>(defaultFormData);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [pairingModalOpen, setPairingModalOpen] = useState(false);
+  const [pairingCode, setPairingCode] = useState('');
+  const [pairingUserSearch, setPairingUserSearch] = useState('');
+  const [pairingUserId, setPairingUserId] = useState('');
 
   const { data: usersData, isLoading: usersLoading } = useQuery({
     queryKey: ['users', search, statusFilter],
@@ -52,6 +56,15 @@ export function Users() {
       });
       return response.data.data;
     },
+  });
+
+  const { data: pendingPairings, refetch: refetchPending } = useQuery({
+    queryKey: ['admin-pending-pairings'],
+    queryFn: async () => {
+      const response = await api.get('/admin/pairing/pending');
+      return response.data.data;
+    },
+    refetchInterval: 30000,
   });
 
   const { data: packsData } = useQuery({
@@ -131,6 +144,37 @@ export function Users() {
     },
   });
 
+  const approvePairingMutation = useMutation({
+    mutationFn: async ({ code, userId }: { code: string; userId: string }) => {
+      const response = await api.post('/admin/pairing/approve', { code, userId });
+      return response.data;
+    },
+    onSuccess: () => {
+      toast.success('TV autorizado. El cliente ya puede ver.');
+      setPairingModalOpen(false);
+      setPairingCode('');
+      setPairingUserId('');
+      refetchPending();
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message || 'Error al aprobar código');
+    },
+  });
+
+  const handleApprovePairing = () => {
+    if (!pairingCode || !pairingUserId) {
+      toast.error('Código y usuario son requeridos');
+      return;
+    }
+    approvePairingMutation.mutate({ code: pairingCode, userId: pairingUserId });
+  };
+
+  const filteredUsersForPairing = ((usersData?.users || []) as User[]).filter((u: User) =>
+    (u.status === 'ACTIVE' || u.status === 'TRIAL') &&
+    (u.username.toLowerCase().includes(pairingUserSearch.toLowerCase()) ||
+     (u.fullName && u.fullName.toLowerCase().includes(pairingUserSearch.toLowerCase())))
+  );
+
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.username || !formData.password) {
@@ -196,9 +240,14 @@ export function Users() {
       <Card>
         <div className="card-header">
           <h3 className="card-title">Usuarios</h3>
-          <Button icon={<Plus size={18} />} onClick={() => setCreateModalOpen(true)}>
-            Nuevo Usuario
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button icon={<Tv size={18} />} onClick={() => setPairingModalOpen(true)}>
+              Emparejar TV
+            </Button>
+            <Button icon={<Plus size={18} />} onClick={() => setCreateModalOpen(true)}>
+              Nuevo Usuario
+            </Button>
+          </div>
         </div>
 
         <div className="flex items-center gap-4 mb-4">
@@ -443,6 +492,73 @@ export function Users() {
         title="Eliminar Usuario"
         message="¿Estás seguro de eliminar este usuario? Esta acción no se puede deshacer."
       />
+
+      <Modal isOpen={pairingModalOpen} onClose={() => setPairingModalOpen(false)} title="Emparejar TV" size="md">
+        <div className="space-y-4">
+          <div className="form-group">
+            <label className="form-label">Código del cliente</label>
+            <input
+              type="text"
+              className="input-field"
+              placeholder="264-716"
+              value={pairingCode}
+              onChange={(e) => {
+                const val = e.target.value.replace(/[^0-9-]/g, '').toUpperCase();
+                setPairingCode(val);
+              }}
+              style={{ fontSize: '20px', textAlign: 'center', letterSpacing: '4px' }}
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Asignar a usuario</label>
+            <input
+              type="text"
+              className="input-field"
+              placeholder="Buscar usuario..."
+              value={pairingUserSearch}
+              onChange={(e) => setPairingUserSearch(e.target.value)}
+            />
+            <div className="user-list" style={{ maxHeight: '200px', overflowY: 'auto', marginTop: '8px', background: 'var(--bg-input)', borderRadius: '8px' }}>
+              {filteredUsersForPairing.slice(0, 10).map(u => (
+                <div
+                  key={u.id}
+                  onClick={() => { setPairingUserId(u.id); setPairingUserSearch(u.username); }}
+                  style={{
+                    padding: '10px 12px',
+                    cursor: 'pointer',
+                    borderBottom: '1px solid var(--border)',
+                    background: pairingUserId === u.id ? 'var(--accent-blue)' + '20' : 'transparent',
+                  }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="table-avatar" style={{ background: 'rgba(59,130,246,0.2)', color: '#60a5fa', width: '28px', height: '28px', fontSize: '11px' }}>
+                      {u.username.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-medium text-text-primary text-sm">{u.username}</p>
+                      <p className="text-xs text-text-secondary">{u.fullName || '-'}</p>
+                    </div>
+                    <Badge variant={u.status === 'ACTIVE' ? 'active' : 'trial'}>{u.status}</Badge>
+                  </div>
+                </div>
+              ))}
+              {filteredUsersForPairing.length === 0 && (
+                <p className="text-text-muted text-sm" style={{ padding: '16px', textAlign: 'center' }}>No hay usuarios activos</p>
+              )}
+            </div>
+          </div>
+
+          <Button
+            onClick={handleApprovePairing}
+            loading={approvePairingMutation.isPending}
+            disabled={!pairingCode || !pairingUserId}
+            className="btn btn-primary w-full"
+          >
+            Autorizar TV
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

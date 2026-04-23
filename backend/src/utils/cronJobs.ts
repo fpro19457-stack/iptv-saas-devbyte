@@ -2,6 +2,45 @@ import cron from 'node-cron';
 import prisma from '../config/database';
 
 export function startCronJobs() {
+  cron.schedule('*/5 * * * *', async () => {
+    try {
+      const now = new Date();
+      const expiredCodes = await prisma.pairingCode.updateMany({
+        where: {
+          status: 'PENDING',
+          expiresAt: { lt: now },
+        },
+        data: { status: 'EXPIRED' },
+      });
+
+      if (expiredCodes.count > 0) {
+        console.log(`[CRON] Marcados ${expiredCodes.count} códigos de emparejamiento como EXPIRED`);
+      }
+    } catch (err) {
+      console.error('[CRON] Error en job de códigos expirados:', err);
+    }
+  });
+
+  let lastMonitorRun = 0;
+
+  setInterval(async () => {
+    try {
+      const config = await prisma.monitorConfig.findFirst();
+      const intervalMs = (config?.intervalMinutes || 5) * 60 * 1000;
+      const now = Date.now();
+
+      if (now - lastMonitorRun >= intervalMs) {
+        lastMonitorRun = now;
+        const { runMonitorCycle } = await import('../modules/monitor/monitor.service');
+        await runMonitorCycle();
+      }
+    } catch (err) {
+      console.error('[MONITOR] Error en ciclo de monitoreo:', err);
+    }
+  }, 30000);
+
+  console.log(`[CRON] Monitor corriendo con intervalo configurable`);
+
   cron.schedule('0 10 * * *', async () => {
     try {
       const now = new Date();

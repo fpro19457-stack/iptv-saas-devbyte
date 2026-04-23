@@ -7,18 +7,28 @@ import { Users } from './pages/Users';
 import { Packs } from './pages/Packs';
 import { Sessions } from './pages/Sessions';
 import { Notifications } from './pages/Notifications';
+import { Monitor } from './pages/Monitor';
+
+function PrivateRoute({ children }: { children: React.ReactNode }) {
+  const token = localStorage.getItem('adminToken');
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+  return <Layout>{children}</Layout>;
+}
 
 function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/" element={<Layout><Navigate to="/dashboard" /></Layout>} />
-      <Route path="/dashboard" element={<Layout><Dashboard /></Layout>} />
-      <Route path="/channels" element={<Layout><Channels /></Layout>} />
-      <Route path="/users" element={<Layout><Users /></Layout>} />
-      <Route path="/packs" element={<Layout><Packs /></Layout>} />
-      <Route path="/sessions" element={<Layout><Sessions /></Layout>} />
-      <Route path="/notifications" element={<Layout><Notifications /></Layout>} />
+      <Route path="/" element={<PrivateRoute><Navigate to="/dashboard" /></PrivateRoute>} />
+      <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+      <Route path="/channels" element={<PrivateRoute><Channels /></PrivateRoute>} />
+      <Route path="/users" element={<PrivateRoute><Users /></PrivateRoute>} />
+      <Route path="/packs" element={<PrivateRoute><Packs /></PrivateRoute>} />
+      <Route path="/sessions" element={<PrivateRoute><Sessions /></PrivateRoute>} />
+      <Route path="/notifications" element={<PrivateRoute><Notifications /></PrivateRoute>} />
+      <Route path="/monitor" element={<PrivateRoute><Monitor /></PrivateRoute>} />
     </Routes>
   );
 }

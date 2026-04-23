@@ -2,7 +2,9 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <title>IPTV - Canales</title>
   <link rel="stylesheet" href="css/styles.css">
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js"></script>
@@ -24,7 +26,7 @@
         </div>
         <div class="sidebar-right">
           <div class="user-avatar" id="userAvatar">U</div>
-          <button id="logoutBtn" class="logout-btn" title="Cerrar sesión">
+          <button id="logoutBtn" class="logout-btn" title="Cerrar sesión" tabindex="1">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
               <polyline points="16 17 21 12 16 7"></polyline>
@@ -35,10 +37,10 @@
       </div>
 
       <!-- Category Filters -->
-      <div class="filters-container" id="categoryFilters"></div>
+      <div class="filters-container" id="categoryFilters" tabindex="2"></div>
 
       <!-- Channel List -->
-      <div class="channel-list" id="channelList"></div>
+      <div class="channel-list" id="channelList" tabindex="3"></div>
 
       <!-- Mobile Bottom Panel Handle -->
       <div class="mobile-handle" id="sidebarHandle"></div>
@@ -58,7 +60,7 @@
 
       <!-- Video Container -->
       <div class="video-container" id="videoContainer">
-        <video id="videoPlayer" playsinline></video>
+        <video id="videoPlayer" playsinline tabindex="4"></video>
 
         <!-- Loading Spinner -->
         <div class="loading-spinner" id="loadingSpinner">
@@ -110,6 +112,17 @@
             </svg>
           </button>
           <div class="controls-right">
+            <button id="qualityBtn" class="control-fullscreen" title="Cambiar calidad" onclick="showQualityMenu()">
+              <span id="qualityLabel" style="font-size:11px;font-weight:700;">HD</span>
+            </button>
+            <button id="cinemaModeBtn" class="control-fullscreen" title="Modo cine">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M15 3h6v6"></path>
+                <path d="M9 21H3v-6"></path>
+                <path d="M21 3l-7 7"></path>
+                <path d="M3 21l7-7"></path>
+              </svg>
+            </button>
             <span class="channel-time" id="channelTime"></span>
             <button class="control-fullscreen" id="controlFullscreen">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -133,8 +146,11 @@
 
     <!-- Toast Notifications Container -->
     <div id="toastContainer"></div>
+
+    <div class="cinema-overlay-bg" id="cinemaOverlayBg"></div>
   </div>
 
+  <script src="js/remote.js"></script>
   <script src="js/channels.js"></script>
 </body>
 </html>

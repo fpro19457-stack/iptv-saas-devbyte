@@ -1,6 +1,11 @@
-const API_URL = 'http://localhost:3002/api';
+const API_URL = 'http://192.168.100.120:3002/api';
+
+let currentTab = 'credentials';
+let pairingPollingInterval = null;
+let pairingExpiryTimeout = null;
 
 function logout() {
+  stopPairingPolling();
   localStorage.removeItem('accessToken');
   localStorage.removeItem('refreshToken');
   localStorage.removeItem('user');
@@ -8,18 +13,18 @@ function logout() {
   window.location.href = 'index.html';
 }
 
-function showError(message) {
-  const errorMessage = document.getElementById('errorMessage');
-  if (errorMessage) {
-    errorMessage.textContent = message;
-    errorMessage.style.display = 'block';
+function showError(message, elementId = 'errorMessage') {
+  const errorElement = document.getElementById(elementId);
+  if (errorElement) {
+    errorElement.textContent = message;
+    errorElement.style.display = 'block';
   }
 }
 
-function hideError() {
-  const errorMessage = document.getElementById('errorMessage');
-  if (errorMessage) {
-    errorMessage.style.display = 'none';
+function hideError(elementId = 'errorMessage') {
+  const errorElement = document.getElementById(elementId);
+  if (errorElement) {
+    errorElement.style.display = 'none';
   }
 }
 
@@ -30,11 +35,187 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
+  initTabs();
+  initPairingTab();
+
   const loginForm = document.getElementById('loginForm');
   if (loginForm) {
     loginForm.addEventListener('submit', handleLogin);
   }
 });
+
+function initTabs() {
+  const tabs = document.querySelectorAll('.login-tab');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const tabName = tab.dataset.tab;
+      switchTab(tabName);
+    });
+  });
+}
+
+function switchTab(tabName) {
+  currentTab = tabName;
+  stopPairingPolling();
+
+  document.querySelectorAll('.login-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.tab === tabName);
+  });
+
+  document.querySelectorAll('.tab-content').forEach(content => {
+    content.classList.toggle('active', content.dataset.tab === tabName);
+  });
+
+  if (tabName === 'pairing') {
+    startPairing();
+  }
+}
+
+async function initPairingTab() {
+  const regenerateBtn = document.getElementById('regenerateBtn');
+  if (regenerateBtn) {
+    regenerateBtn.addEventListener('click', startPairing);
+  }
+}
+
+async function startPairing() {
+  stopPairingPolling();
+  hideError('pairingError');
+
+  const codeElement = document.getElementById('pairingCode');
+  const expiryElement = document.getElementById('pairingExpiry');
+  const statusElement = document.getElementById('pairingStatus');
+  const regenerateBtn = document.getElementById('regenerateBtn');
+  const codeBox = document.getElementById('pairingCodeDisplay');
+
+  if (codeElement) codeElement.textContent = 'Generando...';
+  if (expiryElement) expiryElement.textContent = '';
+  if (statusElement) statusElement.innerHTML = '<span class="pairing-dots">Generando código<span class="dot1">.</span><span class="dot2">.</span><span class="dot3">.</span></span>';
+  if (regenerateBtn) regenerateBtn.style.display = 'none';
+  if (codeBox) codeBox.style.opacity = '1';
+
+  try {
+    const response = await fetch(`${API_URL}/auth/pairing/generate`, {
+      method: 'POST'
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || 'Error al generar código');
+    }
+
+    const code = data.data.code;
+    const expiresAt = new Date(data.data.expiresAt);
+    const expiresInSeconds = data.data.expiresInSeconds;
+
+    if (codeElement) codeElement.textContent = code;
+    updateExpiryCountdown(expiresAt);
+
+    if (statusElement) {
+      statusElement.innerHTML = '<span class="pairing-dots">Esperando aprobación<span class="dot1">.</span><span class="dot2">.</span><span class="dot3">.</span></span>';
+    }
+
+    startPairingPolling(code, expiresAt);
+
+  } catch (err) {
+    if (statusElement) {
+      statusElement.innerHTML = `<span style="color: var(--tv-error)">Error: ${err.message}</span>`;
+    }
+  }
+}
+
+function updateExpiryCountdown(expiresAt) {
+  const expiryElement = document.getElementById('pairingExpiry');
+
+  clearInterval(pairingExpiryTimeout);
+
+  function update() {
+    const now = new Date();
+    const remaining = Math.max(0, expiresAt.getTime() - now.getTime());
+    const minutes = Math.floor(remaining / 60000);
+    const seconds = Math.floor((remaining % 60000) / 1000);
+
+    if (expiryElement) {
+      expiryElement.textContent = `Expira en ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+      if (remaining < 120000 && remaining > 0) {
+        expiryElement.style.color = 'var(--tv-error)';
+      } else {
+        expiryElement.style.color = '';
+      }
+    }
+
+    if (remaining <= 0) {
+      clearInterval(pairingExpiryTimeout);
+      handlePairingExpired();
+    }
+  }
+
+  update();
+  pairingExpiryTimeout = setInterval(update, 1000);
+}
+
+function startPairingPolling(code, expiresAt) {
+  stopPairingPolling();
+
+  pairingPollingInterval = setInterval(async () => {
+    if (currentTab !== 'pairing') {
+      stopPairingPolling();
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/auth/pairing/status/${code}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        return;
+      }
+
+      if (data.data.status === 'APPROVED') {
+        clearInterval(pairingExpiryTimeout);
+        stopPairingPolling();
+
+        localStorage.setItem('accessToken', data.data.accessToken);
+        localStorage.setItem('refreshToken', data.data.refreshToken);
+        localStorage.setItem('user', JSON.stringify(data.data.user));
+
+        const statusElement = document.getElementById('pairingStatus');
+        if (statusElement) {
+          statusElement.innerHTML = '<span style="color: var(--tv-success); font-size: 18px;">✓ Autorizado</span>';
+        }
+
+        setTimeout(() => {
+          window.location.href = 'canales.html';
+        }, 1000);
+      }
+    } catch (err) {
+      console.error('Polling error:', err);
+    }
+  }, 3000);
+}
+
+function stopPairingPolling() {
+  if (pairingPollingInterval) {
+    clearInterval(pairingPollingInterval);
+    pairingPollingInterval = null;
+  }
+}
+
+function handlePairingExpired() {
+  stopPairingPolling();
+
+  const statusElement = document.getElementById('pairingStatus');
+  const regenerateBtn = document.getElementById('regenerateBtn');
+  const codeBox = document.getElementById('pairingCodeDisplay');
+
+  if (statusElement) {
+    statusElement.innerHTML = '<span style="color: var(--tv-warning)">Código expirado</span>';
+  }
+  if (regenerateBtn) regenerateBtn.style.display = 'block';
+  if (codeBox) codeBox.style.opacity = '0.5';
+}
 
 async function handleLogin(e) {
   e.preventDefault();

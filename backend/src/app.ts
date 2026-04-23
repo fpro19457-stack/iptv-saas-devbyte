@@ -4,16 +4,20 @@ import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { Server as SocketServer } from 'socket.io';
 import authRoutes from './modules/auth/auth.routes';
+import authPairingRoutes from './modules/auth/pairing.routes';
 import adminAuthRoutes from './modules/admin/auth/adminAuth.routes';
 import channelsRoutes from './modules/channels/channels.routes';
 import adminChannelsRoutes from './modules/admin/channels/adminChannels.routes';
 import adminPacksRoutes from './modules/admin/packs/adminPacks.routes';
 import userPacksRoutes from './modules/admin/users/userPacks.routes';
 import adminUsersRoutes from './modules/admin/users/adminUsers.routes';
+import adminPairingRoutes from './modules/admin/pairing/pairing.routes';
 import metricsRoutes from './modules/admin/metrics/metrics.routes';
 import sessionsRoutes from './modules/admin/sessions/sessions.routes';
+import monitorRoutes from './modules/monitor/monitor.routes';
 import notificationsRoutes from './modules/notifications/notifications.routes';
 import adminNotificationsRoutes from './modules/admin/notifications/adminNotifications.routes';
+import favoritesRoutes from './modules/favorites/favorites.routes';
 import { startCronJobs } from './utils/cronJobs';
 import { authenticateAdmin } from './middlewares/authenticateAdmin';
 
@@ -41,16 +45,20 @@ app.get('/api/health', (req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/auth', authPairingRoutes);
 app.use('/api/admin', adminAuthRoutes);
 app.use('/api/channels', channelsRoutes);
 app.use('/api/admin/channels', adminChannelsRoutes);
 app.use('/api/admin/packs', adminPacksRoutes);
 app.use('/api/admin/users', adminUsersRoutes);
 app.use('/api/admin/users', userPacksRoutes);
+app.use('/api/admin/pairing', adminPairingRoutes);
 app.use('/api/admin/metrics', metricsRoutes);
 app.use('/api/admin/sessions', sessionsRoutes);
+app.use('/api/admin/monitor', monitorRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/admin/notifications', adminNotificationsRoutes);
+app.use('/api/favorites', favoritesRoutes);
 
 const httpServer = createServer(app);
 
@@ -94,8 +102,8 @@ io.of('/admin-socket').on('connection', (socket) => {
 
 startCronJobs();
 
-httpServer.listen(PORT, () => {
-  console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
+httpServer.listen(Number(PORT), '0.0.0.0', () => {
+  console.log(`🚀 Servidor corriendo en puerto ${PORT} (accessible en red local)`);
 });
 
 export default app;

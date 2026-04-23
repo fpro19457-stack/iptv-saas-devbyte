@@ -167,8 +167,33 @@ export async function me(req: AuthRequest, res: Response) {
       pin: user.pin,
       packs: user.userPacks.map((up) => up.pack),
       unreadNotifications,
+      preferences: {
+        lastChannelId: user.lastChannelId,
+        lastVolume: user.lastVolume,
+        lastCinemaMode: user.lastCinemaMode,
+      },
     });
   } catch (err) {
     return error(res, 'Error al obtener usuario', 500);
+  }
+}
+
+export async function updatePreferences(req: AuthRequest, res: Response) {
+  try {
+    const { lastChannelId, lastVolume, lastCinemaMode } = req.body;
+
+    const updateData: any = { lastUpdated: new Date() };
+    if (lastChannelId !== undefined) updateData.lastChannelId = lastChannelId;
+    if (lastVolume !== undefined) updateData.lastVolume = lastVolume;
+    if (lastCinemaMode !== undefined) updateData.lastCinemaMode = lastCinemaMode;
+
+    await prisma.user.update({
+      where: { id: req.user!.id },
+      data: updateData,
+    });
+
+    return success(res, null, 'Preferencias actualizadas');
+  } catch (err) {
+    return error(res, 'Error al actualizar preferencias', 500);
   }
 }

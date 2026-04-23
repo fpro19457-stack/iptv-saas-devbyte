@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
-const API_URL = 'http://localhost:3002/api';
+const API_URL = 'http://192.168.100.120:3002/api';
 
 export const api = axios.create({
   baseURL: API_URL,

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { verifyAccessToken } from '../utils/jwt';
+import { verifyAdminToken } from '../utils/jwt';
 import { error } from '../utils/response';
 
 interface AuthRequest extends Request {
@@ -18,16 +18,16 @@ export async function authenticateAdmin(req: AuthRequest, res: Response, next: N
     }
 
     const token = authHeader.split(' ')[1];
-    const payload = verifyAccessToken(token);
+    const payload = verifyAdminToken(token);
 
     if (!payload || !('adminId' in payload)) {
       return error(res, 'Token inválido o expirado', 401);
     }
 
     req.admin = {
-      id: (payload as any).adminId,
+      id: payload.adminId,
       username: payload.username,
-      role: (payload as any).role,
+      role: payload.role,
     };
 
     next();

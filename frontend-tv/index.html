@@ -2,7 +2,10 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>IPTV - Login</title>
   <link rel="stylesheet" href="css/styles.css">
 </head>
@@ -17,7 +20,12 @@
         <span>IPTV DevByte</span>
       </div>
 
-      <form id="loginForm" class="login-form">
+      <div class="login-tabs">
+        <button class="login-tab active" data-tab="credentials" tabindex="1">Usuario y clave</button>
+        <button class="login-tab" data-tab="pairing" tabindex="2">Emparejar TV</button>
+      </div>
+
+      <form id="loginForm" class="login-form tab-content active" data-tab="credentials">
         <div class="input-group">
           <svg class="input-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
@@ -47,6 +55,24 @@
           </span>
         </button>
       </form>
+
+      <div id="pairingTab" class="login-form tab-content pairing-content" data-tab="pairing">
+        <div id="pairingCodeDisplay" class="pairing-code-box">
+          <div class="pairing-code-label">Código de emparejamiento</div>
+          <div id="pairingCode" class="pairing-code">---</div>
+          <div id="pairingExpiry" class="pairing-expiry">Expira en --:--</div>
+        </div>
+
+        <div id="pairingStatus" class="pairing-status">
+          <span class="pairing-dots">Esperando aprobación<span class="dot1">.</span><span class="dot2">.</span><span class="dot3">.</span></span>
+        </div>
+
+        <div id="pairingError" class="error-message" style="display: none;"></div>
+
+        <button id="regenerateBtn" class="btn-login" style="display: none;" tabindex="4">
+          <span class="btn-text">Generar nuevo código</span>
+        </button>
+      </div>
 
       <div class="login-footer">
         <p>Compatible con Smart TV y navegadores</p>

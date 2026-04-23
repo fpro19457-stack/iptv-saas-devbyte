@@ -32,10 +32,23 @@ enum Quality {
   FHD
 }
 
+enum PairingStatus {
+  PENDING
+  APPROVED
+  EXPIRED
+  USED
+}
+
 enum NotificationType {
   INFO
   WARNING
   DANGER
+}
+
+enum CheckStatus {
+  UP
+  DOWN
+  TIMEOUT
 }
 
 model AdminUser {
@@ -58,6 +71,10 @@ model User {
   expiresAt    DateTime?
   maxDevices   Int        @default(2)
   pin          String?
+  lastChannelId String?
+  lastVolume    Int        @default(100)
+  lastCinemaMode Boolean  @default(false)
+  lastUpdated   DateTime?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
@@ -65,6 +82,30 @@ model User {
   userPacks      UserPack[]
   notifications  Notification[]
   activityLogs   ActivityLog[]
+  pairingCodes   PairingCode[]
+  favorites      UserFavorite[]
+}
+
+model UserFavorite {
+  userId    String
+  channelId String
+  createdAt DateTime @default(now())
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@id([userId, channelId])
+}
+
+model PairingCode {
+  id        String         @id @default(uuid())
+  code      String         @unique
+  userId    String?
+  user      User?          @relation(fields: [userId], references: [id])
+  status    PairingStatus  @default(PENDING)
+  ipAddress String?
+  expiresAt DateTime
+  approvedAt DateTime?
+  createdAt DateTime       @default(now())
 }
 
 model Session {
@@ -90,17 +131,27 @@ model Channel {
   logoUrl        String?
   streamUrl      String
   streamUrlBackup String?
+  streamUrlSD    String?
+  streamUrlHD    String?
+  streamUrlFHD   String?
+  defaultQuality Quality @default(HD)
   category       String
   isAdult        Boolean @default(false)
   quality        Quality @default(SD)
   isActive       Boolean @default(true)
   sortOrder      Int     @default(0)
+  failCount      Int     @default(0)
+  lastCheck      DateTime?
+  isDown         Boolean @default(false)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   packChannels   PackChannel[]
   activityLogs   ActivityLog[]
   sessions       Session[]
+  checks         ChannelCheck[]
+  incidents      ChannelIncident[]
+  favoritedBy    UserFavorite[]
 }
 
 model Pack {
@@ -160,4 +211,36 @@ model ActivityLog {
 
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   channel Channel? @relation(fields: [channelId], references: [id], onDelete: SetNull)
+}
+
+model MonitorConfig {
+  id              String  @id @default(uuid())
+  intervalMinutes Int     @default(5)
+  failThreshold   Int     @default(3)
+  emailAlerts     String[]
+  telegramToken   String?
+  telegramChatId  String?
+  updatedAt       DateTime @updatedAt
+}
+
+model ChannelCheck {
+  id          String   @id @default(uuid())
+  channelId   String
+  channel     Channel  @relation(fields: [channelId], references: [id])
+  status      CheckStatus
+  responseCode Int?
+  responseTimeMs Int?
+  errorMessage String?
+  checkedAt   DateTime @default(now())
+}
+
+model ChannelIncident {
+  id          String    @id @default(uuid())
+  channelId   String
+  channel     Channel   @relation(fields: [channelId], references: [id])
+  startedAt   DateTime  @default(now())
+  resolvedAt  DateTime?
+  duration    Int?
+  failCount   Int       @default(0)
+  notified    Boolean   @default(false)
 }
