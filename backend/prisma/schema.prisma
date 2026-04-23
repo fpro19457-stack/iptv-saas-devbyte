@@ -1,0 +1,163 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  TRIAL
+  EXPIRED
+}
+
+enum DeviceType {
+  TV
+  BROWSER
+  MOBILE
+  UNKNOWN
+}
+
+enum Quality {
+  SD
+  HD
+  FHD
+}
+
+enum NotificationType {
+  INFO
+  WARNING
+  DANGER
+}
+
+model AdminUser {
+  id           String    @id @default(uuid())
+  username     String    @unique
+  email        String    @unique
+  passwordHash String
+  role         AdminRole @default(ADMIN)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model User {
+  id           String     @id @default(uuid())
+  username     String     @unique
+  email        String?    @unique
+  passwordHash String
+  fullName     String?
+  status       UserStatus @default(TRIAL)
+  expiresAt    DateTime?
+  maxDevices   Int        @default(2)
+  pin          String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  sessions       Session[]
+  userPacks      UserPack[]
+  notifications  Notification[]
+  activityLogs   ActivityLog[]
+}
+
+model Session {
+  id              String     @id @default(uuid())
+  userId          String
+  deviceName      String?
+  deviceType      DeviceType @default(UNKNOWN)
+  ipAddress       String?
+  userAgent       String?
+  token           String     @unique
+  lastSeen        DateTime   @default(now())
+  createdAt       DateTime   @default(now())
+  currentChannelId String?
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel Channel? @relation(fields: [currentChannelId], references: [id])
+}
+
+model Channel {
+  id             String   @id @default(uuid())
+  number         Int     @unique
+  name           String
+  logoUrl        String?
+  streamUrl      String
+  streamUrlBackup String?
+  category       String
+  isAdult        Boolean @default(false)
+  quality        Quality @default(SD)
+  isActive       Boolean @default(true)
+  sortOrder      Int     @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  packChannels   PackChannel[]
+  activityLogs   ActivityLog[]
+  sessions       Session[]
+}
+
+model Pack {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  color       String
+  icon        String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  packChannels PackChannel[]
+  userPacks    UserPack[]
+}
+
+model PackChannel {
+  packId    String
+  channelId String
+
+  pack    Pack    @relation(fields: [packId], references: [id], onDelete: Cascade)
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@id([packId, channelId])
+}
+
+model UserPack {
+  userId     String
+  packId     String
+  assignedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pack Pack @relation(fields: [packId], references: [id], onDelete: Cascade)
+
+  @@id([userId, packId])
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String?
+  title     String
+  message   String
+  type      NotificationType @default(INFO)
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  userId    String
+  channelId String?
+  action    String
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel Channel? @relation(fields: [channelId], references: [id], onDelete: SetNull)
+}
