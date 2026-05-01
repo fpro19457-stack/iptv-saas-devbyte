@@ -14,12 +14,38 @@ export function Packs() {
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    color: '#3b82f6',
+    isActive: true,
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ['packs'],
     queryFn: async () => {
       const response = await api.get('/admin/packs');
       return response.data.data;
+    },
+  });
+
+  const packs = data || [];
+
+  const createMutation = useMutation({
+    mutationFn: async (data: typeof formData) => {
+      const response = await api.post('/admin/packs', data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['packs'] });
+      toast.success('Pack creado');
+      setModalOpen(false);
+      setEditId(null);
+      setFormData({ name: '', description: '', color: '#3b82f6', isActive: true });
+    },
+    onError: () => {
+      toast.error('Error al crear pack');
     },
   });
 
@@ -37,14 +63,48 @@ export function Packs() {
     },
   });
 
-  const packs = data || [];
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: typeof formData }) => {
+      const response = await api.put(`/admin/packs/${id}`, data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['packs'] });
+      toast.success('Pack actualizado');
+      setModalOpen(false);
+      setEditId(null);
+      setFormData({ name: '', description: '', color: '#3b82f6', isActive: true });
+    },
+    onError: () => {
+      toast.error('Error al actualizar pack');
+    },
+  });
+
+  const openEditModal = (pack: Pack) => {
+    setEditId(pack.id);
+    setFormData({
+      name: pack.name,
+      description: pack.description || '',
+      color: pack.color || '#3b82f6',
+      isActive: pack.isActive,
+    });
+    setModalOpen(true);
+  };
+
+  const handleSubmit = () => {
+    if (editId) {
+      updateMutation.mutate({ id: editId, data: formData });
+    } else {
+      createMutation.mutate(formData);
+    }
+  };
 
   return (
     <div className="space-y-6">
       <Card>
         <div className="card-header">
           <h3 className="card-title">Packs</h3>
-          <Button icon={<Plus size={18} />} onClick={() => setModalOpen(true)}>
+          <Button icon={<Plus size={18} />} onClick={() => { setEditId(null); setFormData({ name: '', description: '', color: '#3b82f6', isActive: true }); setModalOpen(true); }}>
             Nuevo Pack
           </Button>
         </div>
@@ -71,7 +131,7 @@ export function Packs() {
             )},
             { key: 'actions', header: 'Acciones', render: (p: Pack) => (
               <div className="flex items-center gap-2">
-                <button className="p-2 text-text-secondary hover:text-accent-blue transition-colors"><Edit size={16} /></button>
+                <button onClick={() => openEditModal(p)} className="p-2 text-text-secondary hover:text-accent-blue transition-colors"><Edit size={16} /></button>
                 <button onClick={() => setDeleteId(p.id)} className="p-2 text-text-secondary hover:text-accent-red transition-colors"><Trash2 size={16} /></button>
               </div>
             )},
@@ -82,24 +142,63 @@ export function Packs() {
         />
       </Card>
 
-      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Nuevo Pack" size="md">
+      <Modal isOpen={modalOpen} onClose={() => { setModalOpen(false); setEditId(null); setFormData({ name: '', description: '', color: '#3b82f6', isActive: true }); }} title={editId ? 'Editar Pack' : 'Nuevo Pack'} size="md">
         <form className="space-y-4">
           <div className="form-group">
             <label className="form-label">Nombre</label>
-            <input type="text" className="input-field" />
+            <input
+              type="text"
+              className="input-field"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            />
           </div>
           <div className="form-group">
             <label className="form-label">Descripción</label>
-            <textarea className="input-field" rows={3} style={{ resize: 'none' }} />
+            <textarea
+              className="input-field"
+              rows={3}
+              style={{ resize: 'none' }}
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            />
           </div>
           <div className="form-group">
             <label className="form-label">Color (hex)</label>
             <div className="flex gap-2">
-              <input type="color" defaultValue="#3b82f6" style={{ width: 48, height: 38, borderRadius: 9, cursor: 'pointer', border: '1px solid var(--border)' }} />
-              <input type="text" defaultValue="#3b82f6" className="input-field" style={{ flex: 1 }} />
+              <input
+                type="color"
+                value={formData.color}
+                style={{ width: 48, height: 38, borderRadius: 9, cursor: 'pointer', border: '1px solid var(--border)' }}
+                onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+              />
+              <input
+                type="text"
+                value={formData.color}
+                className="input-field"
+                style={{ flex: 1 }}
+                onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+              />
             </div>
           </div>
-          <Button type="button" onClick={() => setModalOpen(false)} className="btn btn-primary w-full">Crear Pack</Button>
+          <div className="form-group">
+            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input
+                type="checkbox"
+                checked={formData.isActive}
+                onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+              />
+              Activo
+            </label>
+          </div>
+          <Button
+            type="button"
+            onClick={handleSubmit}
+            loading={createMutation.isPending || updateMutation.isPending}
+            className="btn btn-primary w-full"
+          >
+            {editId ? 'Actualizar Pack' : 'Crear Pack'}
+          </Button>
         </form>
       </Modal>
 

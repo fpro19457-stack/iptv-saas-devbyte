@@ -32,6 +32,7 @@ export interface Channel {
   isActive: boolean;
   sortOrder: number;
   createdAt: string;
+  packChannels?: { packId: string; pack: Pack }[];
 }
 
 export interface Pack {

@@ -37,6 +37,7 @@ export async function listChannels(req: AuthRequest, res: Response) {
       for (const pc of up.pack.packChannels) {
         const channel = pc.channel;
         if (!channel.isActive) continue;
+        if (channel.isDown) continue;
         if (channel.isAdult && !hasAdultPack) continue;
         if (!channelMap.has(channel.id)) {
           channelMap.set(channel.id, {

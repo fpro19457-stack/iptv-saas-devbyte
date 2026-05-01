@@ -1,4 +1,4 @@
-const API_URL = 'http://192.168.100.120:3002/api';
+const API_URL = `https://${window.location.hostname}:3002/api`;
 
 let allChannels = [];
 let filteredChannels = [];
@@ -7,6 +7,7 @@ let currentCategory = 'Todos';
 let lastChannelId = localStorage.getItem('lastChannelId') || null;
 let controlsTimeout = null;
 let currentHls = null;
+let currentDashPlayer = null;
 let timeInterval = null;
 let preferredQuality = localStorage.getItem('preferredQuality') || 'AUTO';
 let favoriteIds = new Set();
@@ -325,6 +326,25 @@ async function playChannel(channelId) {
       headers: { Authorization: `Bearer ${token}` }
     });
 
+    if (response.status === 401) {
+      const newToken = await tryRefreshToken();
+      if (newToken) {
+        const retry = await fetch(`${API_URL}/channels/${channelId}/stream`, {
+          headers: { Authorization: `Bearer ${newToken}` }
+        });
+        if (!retry.ok) throw new Error('No se pudo cargar el canal');
+        const data = await retry.json();
+        lastChannelId = channelId;
+        localStorage.setItem('lastChannelId', channelId);
+        savePreferencesDebounced({ lastChannelId: channelId });
+        playVideo(data.data, channelId);
+        showLoading(false);
+        return;
+      }
+      logout();
+      return;
+    }
+
     if (!response.ok) throw new Error('No se pudo cargar el canal');
 
     const data = await response.json();
@@ -387,6 +407,10 @@ function playVideo(streamData, channelId) {
     currentHls.destroy();
     currentHls = null;
   }
+  if (currentDashPlayer) {
+    currentDashPlayer.reset();
+    currentDashPlayer = null;
+  }
 
   video.pause();
   video.removeAttribute('src');
@@ -395,16 +419,88 @@ function playVideo(streamData, channelId) {
   selectStreamUrl(streamData).then(({ url, quality }) => {
     if (url.includes('.m3u8')) {
       if (Hls.isSupported()) {
-        currentHls = new Hls();
+        currentHls = new Hls({
+          maxBufferLength: 30,
+          maxMaxBufferLength: 60,
+          maxBufferSize: 60 * 1000 * 1000,
+          maxBufferHole: 0.5,
+          lowLatencyMode: false,
+          backBufferLength: 30,
+          fragLoadingTimeOut: 20000,
+          manifestLoadingTimeOut: 20000,
+          levelLoadingTimeOut: 20000,
+          fragLoadingMaxRetry: 6,
+          manifestLoadingMaxRetry: 6,
+          levelLoadingMaxRetry: 6,
+          fragLoadingRetryDelay: 1000,
+        });
         currentHls.loadSource(url);
         currentHls.attachMedia(video);
+        let retryCount = 0;
+        const maxRetries = 3;
+
         currentHls.on(Hls.Events.ERROR, (event, data) => {
-          if (data.fatal && streamData.streamUrlBackup) {
-            currentHls.loadSource(streamData.streamUrlBackup);
-          } else if (data.fatal) {
-            showError('Stream no disponible');
+          console.warn('HLS error:', data.type, data.details, 'fatal:', data.fatal);
+
+          if (!data.fatal) {
+            return;
+          }
+
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              if (retryCount < maxRetries) {
+                retryCount++;
+                console.log(`Reintentando conexión (${retryCount}/${maxRetries})...`);
+                showNotification('Reconectando...', `Intento ${retryCount} de ${maxRetries}`, 'info');
+                setTimeout(() => {
+                  currentHls.startLoad();
+                }, 2000 * retryCount);
+              } else if (streamData.streamUrlBackup) {
+                console.log('Cambiando a URL backup...');
+                showNotification('Señal principal caída', 'Conectando a señal de respaldo...', 'warning');
+                retryCount = 0;
+                currentHls.loadSource(streamData.streamUrlBackup);
+                currentHls.startLoad();
+              } else {
+                showNotification('Sin señal', 'No se puede conectar al canal. Intentá de nuevo más tarde.', 'danger');
+              }
+              break;
+
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              if (retryCount < maxRetries) {
+                retryCount++;
+                console.log('Recuperando error de media...');
+                currentHls.recoverMediaError();
+              } else if (streamData.streamUrlBackup) {
+                showNotification('Error de reproducción', 'Conectando a señal de respaldo...', 'warning');
+                retryCount = 0;
+                currentHls.loadSource(streamData.streamUrlBackup);
+                currentHls.startLoad();
+              } else {
+                showNotification('Error de reproducción', 'No se puede reproducir este canal.', 'danger');
+              }
+              break;
+
+            default:
+              if (streamData.streamUrlBackup) {
+                showNotification('Error inesperado', 'Conectando a señal de respaldo...', 'warning');
+                currentHls.loadSource(streamData.streamUrlBackup);
+                currentHls.startLoad();
+              } else {
+                showNotification('Error', 'No se puede reproducir este canal.', 'danger');
+              }
+              break;
           }
         });
+
+        currentHls.on(Hls.Events.FRAG_LOADED, () => {
+          retryCount = 0;
+        });
+
+        currentHls.on(Hls.Events.BUFFER_STALLED, () => {
+          showNotification('Buffering...', 'Cargando señal, un momento', 'info');
+        });
+
         currentHls.on(Hls.Events.LEVEL_SWITCHED, () => {
           document.getElementById('liveIndicator')?.classList.add('visible');
         });
@@ -418,6 +514,56 @@ function playVideo(streamData, channelId) {
         video.src = url;
         video.play().catch(err => console.log('Playback needs user interaction:', err));
       }
+    } else if (url.includes('.mpd')) {
+      if (typeof dashjs === 'undefined') {
+        showError('DASH player no cargado. Actualizá la página.');
+        showLoading(false);
+        return;
+      }
+
+      if (currentDashPlayer) {
+        currentDashPlayer.reset();
+        currentDashPlayer = null;
+      }
+
+      const isFlow = url.includes('cvattv.com.ar') || url.includes('chromecast') ||
+                     url.includes('edge-live') || url.includes('edge6') || url.includes('edge-vod');
+      const PROXY_BASE = API_URL + '/proxy';
+      const cdntokenMatch = url.match(/cdntoken=([^&]+)/);
+      const cdntoken = cdntokenMatch ? cdntokenMatch[1] : null;
+      window.currentCdntoken = cdntoken;
+
+      const player = dashjs.MediaPlayer().create();
+
+      if (isFlow) {
+        player.initialize(video, `${PROXY_BASE}?url=${encodeURIComponent(url)}`, true, {
+          'stream': { 'buffer': { 'enabled': true, 'bufferTime': 10, 'bufferLength': 5 } },
+          'protectionData': {
+            'com.widevine.alpha': {
+              'serverURL': `${API_URL.replace('/api', '')}/proxy?url=${encodeURIComponent('license://widevine')}`,
+              'withCredentials': false
+            }
+          }
+        });
+      } else {
+        player.initialize(video, `${PROXY_BASE}?url=${encodeURIComponent(url)}`, true);
+      }
+
+      currentDashPlayer = player;
+
+      player.on(dashjs.MediaPlayer.events.ERROR, (e, err) => {
+        console.error('[DASH ERROR]', err?.message || err?.type || err);
+        if (err?.type === 'capability' && err?.message === 'mediasource') {
+          showError('Tu navegador no soporta DASH/MSE. Probá con Chrome o Edge.');
+        }
+      });
+
+      player.on(dashjs.MediaPlayer.events.PLAYBACK_ERROR, (e, err) => {
+        console.error('[DASH PLAYBACK ERROR]', err?.message || err);
+      });
+
+      video.play().catch(err => console.log('Playback needs user interaction:', err));
+      document.getElementById('liveIndicator')?.classList.add('visible');
     } else {
       video.src = url;
       if (streamData.streamUrlBackup) {

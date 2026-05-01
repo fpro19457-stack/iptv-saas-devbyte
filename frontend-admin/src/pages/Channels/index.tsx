@@ -125,22 +125,44 @@ function M3UImportModal({ onImport, loading }: M3UImportModalProps) {
 export function Channels() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkActions, setShowBulkActions] = useState(false);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [formData, setFormData] = useState({
+    number: '',
+    name: '',
+    logoUrl: '',
+    streamUrl: '',
+    category: 'Noticias',
+    quality: 'HD',
+    packIds: [] as string[],
+  });
+
+  const [editId, setEditId] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['channels', search],
+    queryKey: ['channels', search, page],
     queryFn: async () => {
       const response = await api.get('/admin/channels', {
-        params: { limit: 50, search },
+        params: { limit: 50, page, search },
       });
       return response.data.data;
     },
   });
+
+  const { data: packsData } = useQuery({
+    queryKey: ['packs'],
+    queryFn: async () => {
+      const response = await api.get('/admin/packs');
+      return response.data.data;
+    },
+  });
+
+  const packs = packsData || [];
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -194,6 +216,39 @@ export function Channels() {
     },
   });
 
+  const createMutation = useMutation({
+    mutationFn: async (data: typeof formData) => {
+      const response = await api.post('/admin/channels', data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['channels'] });
+      toast.success('Canal creado');
+      setModalOpen(false);
+      setFormData({ number: '', name: '', logoUrl: '', streamUrl: '', category: 'Noticias', quality: 'HD', packIds: [] });
+    },
+    onError: () => {
+      toast.error('Error al crear canal');
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: typeof formData }) => {
+      const response = await api.put(`/admin/channels/${id}`, data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['channels'] });
+      toast.success('Canal actualizado');
+      setModalOpen(false);
+      setEditId(null);
+      setFormData({ number: '', name: '', logoUrl: '', streamUrl: '', category: 'Noticias', quality: 'HD', packIds: [] });
+    },
+    onError: () => {
+      toast.error('Error al actualizar canal');
+    },
+  });
+
   const channels = data?.channels || [];
 
   const toggleSelect = (id: string) => {
@@ -214,6 +269,28 @@ export function Channels() {
     } else {
       setSelectedIds(new Set(channels.map((c: Channel) => c.id)));
       setShowBulkActions(true);
+    }
+  };
+
+  const openEditModal = (channel: Channel) => {
+    setEditId(channel.id);
+    setFormData({
+      number: String(channel.number),
+      name: channel.name,
+      logoUrl: channel.logoUrl || '',
+      streamUrl: channel.streamUrl || '',
+      category: channel.category || 'Noticias',
+      quality: channel.quality || 'HD',
+      packIds: channel.packChannels?.map((pc: any) => pc.packId) || [],
+    });
+    setModalOpen(true);
+  };
+
+  const handleSubmit = () => {
+    if (editId) {
+      updateMutation.mutate({ id: editId, data: formData });
+    } else {
+      createMutation.mutate(formData);
     }
   };
 
@@ -340,7 +417,7 @@ export function Channels() {
             )},
             { key: 'actions', header: 'Acciones', render: (c: Channel) => (
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button style={{ padding: '8px', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}><Edit size={16} /></button>
+                <button onClick={() => openEditModal(c)} style={{ padding: '8px', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}><Edit size={16} /></button>
                 <button onClick={() => setDeleteId(c.id)} style={{ padding: '8px', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}><Trash2 size={16} /></button>
               </div>
             )},
@@ -349,48 +426,150 @@ export function Channels() {
           loading={isLoading}
           emptyMessage="No hay canales"
         />
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
+          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+            Mostrando {channels.length} canales
+          </span>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              style={{
+                padding: '8px 12px',
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border)',
+                borderRadius: '6px',
+                cursor: page === 1 ? 'not-allowed' : 'pointer',
+                color: page === 1 ? 'var(--text-muted)' : 'var(--text-primary)',
+                opacity: page === 1 ? 0.5 : 1,
+              }}
+            >
+              Anterior
+            </button>
+            <span style={{ fontSize: '13px', color: 'var(--text-secondary)', padding: '0 8px' }}>
+              Página {page}{data?.totalPages ? ` de ${data.totalPages}` : ''}
+            </span>
+            <button
+              onClick={() => setPage(p => p + 1)}
+              disabled={!data?.totalPages || page >= data.totalPages}
+              style={{
+                padding: '8px 12px',
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border)',
+                borderRadius: '6px',
+                cursor: (!data?.totalPages || page >= data.totalPages) ? 'not-allowed' : 'pointer',
+                color: (!data?.totalPages || page >= data.totalPages) ? 'var(--text-muted)' : 'var(--text-primary)',
+                opacity: (!data?.totalPages || page >= data.totalPages) ? 0.5 : 1,
+              }}
+            >
+              Siguiente
+            </button>
+          </div>
+        </div>
       </Card>
 
-      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Nuevo Canal" size="md">
+      <Modal isOpen={modalOpen} onClose={() => { setModalOpen(false); setEditId(null); setFormData({ number: '', name: '', logoUrl: '', streamUrl: '', category: 'Noticias', quality: 'HD', packIds: [] }); }} title={editId ? 'Editar Canal' : 'Nuevo Canal'} size="md">
         <div>
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Número</label>
-              <input type="number" className="input-field" />
+              <input
+                type="number"
+                className="input-field"
+                value={formData.number}
+                onChange={e => setFormData({ ...formData, number: e.target.value })}
+              />
             </div>
             <div className="form-group">
               <label className="form-label">Nombre</label>
-              <input type="text" className="input-field" />
+              <input
+                type="text"
+                className="input-field"
+                value={formData.name}
+                onChange={e => setFormData({ ...formData, name: e.target.value })}
+              />
             </div>
           </div>
           <div className="form-group">
             <label className="form-label">URL Logo</label>
-            <input type="text" placeholder="https://..." className="input-field" />
+            <input
+              type="text"
+              placeholder="https://..."
+              className="input-field"
+              value={formData.logoUrl}
+              onChange={e => setFormData({ ...formData, logoUrl: e.target.value })}
+            />
           </div>
           <div className="form-group">
             <label className="form-label">URL Stream</label>
-            <input type="text" placeholder="https://..." className="input-field" />
+            <input
+              type="text"
+              placeholder="https://..."
+              className="input-field"
+              value={formData.streamUrl}
+              onChange={e => setFormData({ ...formData, streamUrl: e.target.value })}
+            />
           </div>
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Categoría</label>
-              <select className="select-field">
+              <select
+                className="select-field"
+                value={formData.category}
+                onChange={e => setFormData({ ...formData, category: e.target.value })}
+              >
                 <option value="Noticias">Noticias</option>
                 <option value="Deportes">Deportes</option>
                 <option value="Entretenimiento">Entretenimiento</option>
+                <option value="Infantil">Infantil</option>
+                <option value="Argentina">Argentina</option>
                 <option value="Adultos">Adultos</option>
               </select>
             </div>
             <div className="form-group">
               <label className="form-label">Calidad</label>
-              <select className="select-field">
+              <select
+                className="select-field"
+                value={formData.quality}
+                onChange={e => setFormData({ ...formData, quality: e.target.value })}
+              >
                 <option value="SD">SD</option>
                 <option value="HD">HD</option>
                 <option value="FHD">FHD</option>
               </select>
             </div>
           </div>
-          <Button type="button" onClick={() => setModalOpen(false)} className="btn btn-primary w-full">Crear Canal</Button>
+          <div className="form-group">
+            <label className="form-label">Packs</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
+              {packs.map((pack: any) => (
+                <label key={pack.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', background: 'var(--bg-input)', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.packIds.includes(pack.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setFormData({ ...formData, packIds: [...formData.packIds, pack.id] });
+                      } else {
+                        setFormData({ ...formData, packIds: formData.packIds.filter((id: string) => id !== pack.id) });
+                      }
+                    }}
+                  />
+                  {pack.name}
+                </label>
+              ))}
+            </div>
+          </div>
+          <Button
+            type="button"
+            onClick={handleSubmit}
+            loading={createMutation.isPending || updateMutation.isPending}
+            className="btn btn-primary w-full"
+            style={{ width: '100%', marginTop: '16px' }}
+          >
+            {editId ? 'Actualizar Canal' : 'Crear Canal'}
+          </Button>
         </div>
       </Modal>
 

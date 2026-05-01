@@ -42,6 +42,14 @@ interface MonitorStatus {
 
 const PAGE_SIZE = 25;
 
+function getResponseColor(ms: number | undefined, error: string | undefined): string {
+  if (!ms && error) return 'text-red-400';
+  if (!ms) return 'text-red-400';
+  if (ms < 500) return 'text-green-400';
+  if (ms <= 1500) return 'text-yellow-400';
+  return 'text-red-400';
+}
+
 export function Monitor() {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<'all' | 'up' | 'down' | 'unstable'>('all');
@@ -153,21 +161,30 @@ export function Monitor() {
 
   const stats = monitorData?.stats || { active: 0, down: 0, avgResponseTime: 0 };
 
+  const lastCheckTime = monitorData?.channels
+    ? (() => {
+        const times = monitorData.channels
+          .filter(c => c.lastCheck)
+          .map(c => new Date(c.lastCheck!).getTime());
+        return times.length > 0 ? new Date(Math.max(...times)) : null;
+      })()
+    : null;
+
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      <div className="monitor-header">
         <div>
-          <h1 className="text-2xl font-bold text-text-primary flex items-center gap-3">
+          <h1 className="monitor-title">
             <Activity className="w-7 h-7 text-accent-blue" />
             Monitor de Canales
           </h1>
-          <p className="text-text-secondary mt-2 text-sm">
-            Último chequeo: {monitorData?.channels[0]?.latestCheck?.checkedAt
-              ? new Date(monitorData.channels[0].latestCheck.checkedAt).toLocaleString()
+          <p className="monitor-subtitle">
+            Último chequeo: {lastCheckTime
+              ? lastCheckTime.toLocaleString()
               : 'Nunca'}
           </p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="monitor-header-actions">
           <Button
             icon={<RefreshCw size={18} />}
             onClick={() => checkNowMutation.mutate()}
@@ -182,217 +199,216 @@ export function Monitor() {
       </div>
 
       {stats.down > 0 && (
-        <div className="p-5 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center gap-4">
-          <XCircle className="w-6 h-6 text-red-500 flex-shrink-0" />
-          <span className="text-red-400 font-semibold text-lg">{stats.down} canal(es) caídos</span>
+        <div className="down-badge">
+          <XCircle className="w-5 h-5" />
+          <span>{stats.down} canal(es) caídos</span>
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
-        <Card className="!p-5">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center">
-              <CheckCircle className="w-6 h-6 text-green-500" />
-            </div>
-            <div>
-              <p className="text-3xl font-bold text-text-primary">{stats.active}</p>
-              <p className="text-sm text-text-secondary mt-1">Canales activos</p>
-            </div>
+      <div className="monitor-metrics">
+        <Card className="metric-card">
+          <div className="metric-icon-box bg-green-500/20">
+            <CheckCircle className="w-6 h-6 text-green-500" />
           </div>
+          <p className="metric-label">Canales activos</p>
+          <p className="metric-value">{stats.active}</p>
         </Card>
 
-        <Card className="!p-5">
-          <div className="flex items-center gap-4">
-            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${stats.down > 0 ? 'bg-red-500/20' : 'bg-green-500/20'}`}>
-              <XCircle className={`w-6 h-6 ${stats.down > 0 ? 'text-red-500' : 'text-green-500'}`} />
-            </div>
-            <div>
-              <p className="text-3xl font-bold text-text-primary">{stats.down}</p>
-              <p className="text-sm text-text-secondary mt-1">Canales caídos</p>
-            </div>
+        <Card className="metric-card">
+          <div className={`metric-icon-box ${stats.down > 0 ? 'bg-red-500/20' : 'bg-green-500/20'}`}>
+            <XCircle className={`w-6 h-6 ${stats.down > 0 ? 'text-red-500' : 'text-green-500'}`} />
           </div>
+          <p className="metric-label">Canales caídos</p>
+          <p className="metric-value">{stats.down}</p>
         </Card>
 
-        <Card className="!p-5">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-cyan-500/20 flex items-center justify-center">
-              <Zap className="w-6 h-6 text-cyan-500" />
-            </div>
-            <div>
-              <p className="text-3xl font-bold text-text-primary">{stats.avgResponseTime}</p>
-              <p className="text-sm text-text-secondary mt-1">ms promedio</p>
-            </div>
+        <Card className="metric-card">
+          <div className="metric-icon-box bg-cyan-500/20">
+            <Zap className="w-6 h-6 text-cyan-500" />
           </div>
+          <p className="metric-label">ms promedio</p>
+          <p className="metric-value">{stats.avgResponseTime}</p>
         </Card>
 
-        <Card className="!p-5">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-accent-blue/20 flex items-center justify-center">
-              <TrendingUp className="w-6 h-6 text-accent-blue" />
-            </div>
-            <div>
-              <p className="text-3xl font-bold text-text-primary">
-                {filteredChannels.length > 0 ? Math.round((stats.active / filteredChannels.length) * 100) : 0}%
-              </p>
-              <p className="text-sm text-text-secondary mt-1">Uptime</p>
-            </div>
+        <Card className="metric-card">
+          <div className="metric-icon-box bg-accent-blue/20">
+            <TrendingUp className="w-6 h-6 text-accent-blue" />
           </div>
+          <p className="metric-label">Uptime</p>
+          <p className="metric-value">
+            {filteredChannels.length > 0 ? Math.round((stats.active / filteredChannels.length) * 100) : 0}%
+          </p>
         </Card>
       </div>
 
       <Card>
-        <div className="p-5 border-b border-border">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <h3 className="text-lg font-semibold text-text-primary">Estado de Canales ({displayChannels.length})</h3>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="input-with-icon" style={{ width: 220 }}>
-                <Search className="w-4 h-4" />
-                <input
-                  type="text"
-                  placeholder="Buscar canal..."
-                  value={searchQuery}
-                  onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-                  className="input-field"
-                />
-              </div>
-              <div className="flex gap-2">
-                {(['all', 'up', 'down', 'unstable'] as const).map(filter => (
-                  <button
-                    key={filter}
-                    onClick={() => { setStatusFilter(filter); setCurrentPage(1); }}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      statusFilter === filter
-                        ? 'bg-accent-blue text-white'
-                        : 'bg-bg-input text-text-secondary hover:text-text-primary'
-                    }`}
-                  >
-                    {filter === 'all' ? 'Todos' : filter === 'up' ? 'En línea' : filter === 'down' ? 'Caídos' : 'Inestables'}
-                  </button>
-                ))}
-              </div>
+        <div className="table-section">
+          <h3 className="table-title">Estado de Canales ({displayChannels.length})</h3>
+          <div className="table-toolbar">
+            <div className="input-with-icon" style={{ width: 220 }}>
+              <Search className="w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Buscar canal..."
+                value={searchQuery}
+                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                className="input-field"
+              />
+            </div>
+            <div className="filter-buttons">
+              {(['all', 'up', 'down', 'unstable'] as const).map(filter => (
+                <button
+                  key={filter}
+                  onClick={() => { setStatusFilter(filter); setCurrentPage(1); }}
+                  className={`filter-btn ${statusFilter === filter ? 'active' : ''}`}
+                >
+                  {filter === 'all' ? 'Todos' : filter === 'up' ? 'En línea' : filter === 'down' ? 'Caídos' : 'Inestables'}
+                </button>
+              ))}
             </div>
           </div>
         </div>
 
-        <div className="p-5">
-          <Table
-            columns={[
-              { key: 'number', header: '#', render: (c: ChannelStatus) => (
-                <span className="font-mono text-text-secondary">{c.number}</span>
-              )},
-              { key: 'name', header: 'Canal', render: (c: ChannelStatus) => (
-                <div className="flex items-center gap-4">
-                  {c.logoUrl ? (
-                    <img src={c.logoUrl} alt="" className="w-10 h-10 rounded-lg object-contain" />
-                  ) : (
-                    <div className="w-10 h-10 rounded-lg bg-bg-input flex items-center justify-center">
-                      <Activity className="w-5 h-5 text-text-muted" />
+        <div className="table-container">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Canal</th>
+                <th>Estado</th>
+                <th>Última respuesta</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedChannels.map((c) => (
+                <tr key={c.id}>
+                  <td className="col-number">{c.number}</td>
+                  <td>
+                    <div className="channel-cell">
+                      {c.logoUrl ? (
+                        <img src={c.logoUrl} alt="" className="channel-logo" />
+                      ) : (
+                        <div className="channel-logo-placeholder">
+                          <Activity className="w-5 h-5 text-text-muted" />
+                        </div>
+                      )}
+                      <div>
+                        <p className="channel-name">{c.name}</p>
+                        <p className="channel-quality">{c.quality}</p>
+                      </div>
                     </div>
-                  )}
-                  <div>
-                    <p className="font-semibold text-text-primary">{c.name}</p>
-                    <p className="text-xs text-text-secondary">{c.quality}</p>
-                  </div>
-                </div>
-              )},
-              { key: 'status', header: 'Estado', render: (c: ChannelStatus) => (
-                c.isDown ? (
-                  <Badge variant="danger">Caído</Badge>
-                ) : c.failCount > 0 ? (
-                  <Badge variant="warning">Inestable ({c.failCount})</Badge>
-                ) : (
-                  <Badge variant="active">En línea</Badge>
-                )
-              )},
-              { key: 'lastCheck', header: 'Última respuesta', render: (c: ChannelStatus) => {
-                if (!c.latestCheck) return '-';
-                if (c.latestCheck.status === 'UP') {
-                  return <span className="text-green-400">{c.latestCheck.responseTimeMs}ms</span>;
-                }
-                return <span className="text-red-400 text-sm">{c.latestCheck.errorMessage || 'Error'}</span>;
-              }},
-              { key: 'actions', header: '', render: (c: ChannelStatus) => (
-                <button
-                  onClick={() => { setVerifyingChannel(c.id); verifyChannelMutation.mutate(c.id); }}
-                  disabled={verifyingChannel === c.id}
-                  className="p-2 rounded-lg bg-bg-input hover:bg-bg-input/80 transition-colors disabled:opacity-50"
-                  title="Verificar canal"
-                >
-                  {verifyingChannel === c.id ? (
-                    <Loader2 className="w-4 h-4 animate-spin text-accent-blue" />
-                  ) : (
-                    <RefreshCw className="w-4 h-4 text-text-secondary" />
-                  )}
-                </button>
-              )},
-            ]}
-            data={paginatedChannels}
-            loading={isLoading}
-            emptyMessage="No hay canales"
-          />
+                  </td>
+                  <td>
+                    {c.isDown ? (
+                      <span className="status-badge down">Caído</span>
+                    ) : c.failCount > 0 ? (
+                      <span className="status-badge unstable">Inestable ({c.failCount})</span>
+                    ) : (
+                      <span className="status-badge online">En línea</span>
+                    )}
+                  </td>
+                  <td>
+                    {c.latestCheck ? (
+                      <span className={`response-time ${getResponseColor(c.latestCheck.responseTimeMs, c.latestCheck.errorMessage)}`}>
+                        {c.latestCheck.status === 'UP'
+                          ? `${c.latestCheck.responseTimeMs}ms`
+                          : c.latestCheck.errorMessage || 'Error'}
+                      </span>
+                    ) : (
+                      <span className="text-text-muted">-</span>
+                    )}
+                  </td>
+                  <td>
+                    <button
+                      onClick={() => { setVerifyingChannel(c.id); verifyChannelMutation.mutate(c.id); }}
+                      disabled={verifyingChannel === c.id}
+                      className="refresh-btn"
+                      title="Verificar canal"
+                    >
+                      {verifyingChannel === c.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-accent-blue" />
+                      ) : (
+                        <RefreshCw className="w-4 h-4 text-text-secondary" />
+                      )}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-6 pt-4 border-t border-border">
-              <p className="text-sm text-text-secondary">
-                Mostrando {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, displayChannels.length)} de {displayChannels.length}
-              </p>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="p-2 rounded-lg bg-bg-input hover:bg-bg-input/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <span className="px-4 py-2 bg-bg-input rounded-lg text-sm font-medium">
-                  {currentPage} / {totalPages}
-                </span>
-                <button
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  className="p-2 rounded-lg bg-bg-input hover:bg-bg-input/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
+        {totalPages > 1 && (
+          <div className="pagination">
+            <p className="pagination-info">
+              Mostrando {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, displayChannels.length)} de {displayChannels.length}
+            </p>
+            <div className="pagination-controls">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="pagination-btn"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="pagination-pages">{currentPage}/{totalPages}</span>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="pagination-btn"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
+          </div>
+        )}
+      </Card>
+
+      <div className="incidents-card">
+      <Card>
+        <div className="incidents-section">
+          <h3 className="table-title" style={{ marginBottom: 20 }}>Historial de Incidentes</h3>
+        </div>
+        <div className="incidents-body">
+          {incidentsData?.incidents && incidentsData.incidents.length === 0 ? (
+            <div className="incidents-empty">
+              <CheckCircle className="w-8 h-8 text-green-500" />
+              <p>Todo funcionando correctamente</p>
+            </div>
+          ) : (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Canal</th>
+                  <th>Inicio</th>
+                  <th>Fin</th>
+                  <th>Duración</th>
+                  <th>Fallos</th>
+                </tr>
+              </thead>
+              <tbody>
+                {incidentsData?.incidents?.map((i: any) => (
+                  <tr key={i.id}>
+                    <td><span className="font-medium text-text-primary">{i.channel?.name || '-'}</span></td>
+                    <td><span className="text-text-secondary">{new Date(i.startedAt).toLocaleString()}</span></td>
+                    <td>
+                      {i.resolvedAt ? (
+                        <span className="text-text-secondary">{new Date(i.resolvedAt).toLocaleString()}</span>
+                      ) : (
+                        <span className="text-red-500 font-medium animate-pulse">En curso</span>
+                      )}
+                    </td>
+                    <td>{i.duration ? <span className="text-text-secondary">{i.duration} min</span> : '-'}</td>
+                    <td><span className="text-text-secondary">{i.failCount}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       </Card>
-
-      <Card>
-        <div className="p-5 border-b border-border">
-          <h3 className="text-lg font-semibold text-text-primary">Historial de Incidentes</h3>
-        </div>
-        <div className="p-5">
-          <Table
-            columns={[
-              { key: 'channel', header: 'Canal', render: (i: any) => (
-                <span className="font-medium text-text-primary">{i.channel?.name || '-'}</span>
-              )},
-              { key: 'startedAt', header: 'Inicio', render: (i: any) => (
-                <span className="text-text-secondary">{new Date(i.startedAt).toLocaleString()}</span>
-              )},
-              { key: 'resolvedAt', header: 'Fin', render: (i: any) => (
-                i.resolvedAt ? (
-                  <span className="text-text-secondary">{new Date(i.resolvedAt).toLocaleString()}</span>
-                ) : (
-                  <span className="text-red-500 font-medium animate-pulse">En curso</span>
-                )
-              )},
-              { key: 'duration', header: 'Duración', render: (i: any) => (
-                i.duration ? <span className="text-text-secondary">{i.duration} min</span> : '-'
-              )},
-              { key: 'failCount', header: 'Fallos', render: (i: any) => (
-                <span className="text-text-secondary">{i.failCount}</span>
-              )},
-            ]}
-            data={incidentsData?.incidents || []}
-            loading={false}
-            emptyMessage="No hay incidentes"
-          />
-        </div>
-      </Card>
+      </div>
 
       <Modal isOpen={configModalOpen} onClose={() => setConfigModalOpen(false)} title="Configuración del Monitor" size="md">
         <div className="space-y-6 p-1">

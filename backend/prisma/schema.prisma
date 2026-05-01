@@ -121,7 +121,7 @@ model Session {
   currentChannelId String?
 
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  channel Channel? @relation(fields: [currentChannelId], references: [id])
+  channel Channel? @relation(fields: [currentChannelId], references: [id], onDelete: SetNull)
 }
 
 model Channel {

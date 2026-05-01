@@ -37,6 +37,7 @@ export async function listChannels(req: Request, res: Response) {
         orderBy: { sortOrder: 'asc' },
         skip: (page - 1) * limit,
         take: limit,
+        include: { packChannels: { include: { pack: true } } },
       }),
       prisma.channel.count({ where }),
     ]);
@@ -62,9 +63,14 @@ export const createValidation = [
 
 export async function createChannel(req: Request, res: Response) {
   try {
-    const { number, name, logoUrl, streamUrl, streamUrlBackup, category, isAdult, quality } = req.body;
+    const { number, name, logoUrl, streamUrl, streamUrlBackup, category, isAdult, quality, packIds } = req.body;
 
-    const existing = await prisma.channel.findUnique({ where: { number } });
+    const channelNumber = parseInt(number, 10);
+    if (isNaN(channelNumber)) {
+      return error(res, 'El número de canal debe ser un número válido', 400);
+    }
+
+    const existing = await prisma.channel.findUnique({ where: { number: channelNumber } });
     if (existing) {
       return error(res, 'El número de canal ya existe', 400);
     }
@@ -74,7 +80,7 @@ export async function createChannel(req: Request, res: Response) {
 
     const channel = await prisma.channel.create({
       data: {
-        number,
+        number: channelNumber,
         name,
         logoUrl: logoUrl || null,
         streamUrl,
@@ -83,6 +89,9 @@ export async function createChannel(req: Request, res: Response) {
         isAdult: isAdult || false,
         quality: quality || 'SD',
         sortOrder,
+        packChannels: packIds?.length
+          ? { create: packIds.map((packId: string) => ({ packId })) }
+          : undefined,
       },
     });
 
@@ -97,12 +106,25 @@ export async function createChannel(req: Request, res: Response) {
 export async function updateChannel(req: Request, res: Response) {
   try {
     const { id } = req.params;
-    const { number, name, logoUrl, streamUrl, streamUrlBackup, category, isAdult, quality, isActive, streamUrlSD, streamUrlHD, streamUrlFHD, defaultQuality } = req.body;
+    const { number, name, logoUrl, streamUrl, streamUrlBackup, category, isAdult, quality, isActive, streamUrlSD, streamUrlHD, streamUrlFHD, defaultQuality, packIds } = req.body;
+
+    if (number !== undefined) {
+      const parsed = parseInt(number, 10);
+      if (isNaN(parsed)) {
+        return error(res, 'El número de canal debe ser un número válido', 400);
+      }
+      const existing = await prisma.channel.findFirst({
+        where: { number: parsed, id: { not: id } },
+      });
+      if (existing) {
+        return error(res, 'El número de canal ya existe', 400);
+      }
+    }
 
     const channel = await prisma.channel.update({
       where: { id },
       data: {
-        ...(number !== undefined && { number }),
+        ...(number !== undefined && { number: parseInt(number, 10) }),
         ...(name !== undefined && { name }),
         ...(logoUrl !== undefined && { logoUrl }),
         ...(streamUrl !== undefined && { streamUrl }),
@@ -118,11 +140,21 @@ export async function updateChannel(req: Request, res: Response) {
       },
     });
 
+    if (Array.isArray(packIds)) {
+      await prisma.packChannel.deleteMany({ where: { channelId: id } });
+      if (packIds.length > 0) {
+        await prisma.packChannel.createMany({
+          data: packIds.map((packId: string) => ({ packId, channelId: id })),
+        });
+      }
+    }
+
     cache.invalidatePattern('channels:');
 
     return success(res, channel, 'Canal actualizado');
-  } catch (err) {
-    return error(res, 'Error al actualizar canal', 500);
+  } catch (err: any) {
+    console.error('[UPDATE CHANNEL ERROR]', err.message);
+    return error(res, 'Error al actualizar canal: ' + err.message, 500);
   }
 }
 
@@ -316,8 +348,11 @@ export async function bulkDeleteChannels(req: Request, res: Response) {
     cache.invalidatePattern('channels:');
 
     return success(res, { deleted: ids.length }, `${ids.length} canales eliminados`);
-  } catch (err) {
-    console.error('Bulk delete error:', err);
+  } catch (err: any) {
+    console.error('Bulk delete error:', err?.message || err);
+    if (err?.code === 'P2003') {
+      return error(res, 'No se puede eliminar: el canal tiene relaciones activas', 400);
+    }
     return error(res, 'Error al eliminar canales', 500);
   }
 }

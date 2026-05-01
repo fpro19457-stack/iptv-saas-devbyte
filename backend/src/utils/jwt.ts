@@ -12,17 +12,17 @@ interface AdminPayload {
 }
 
 export function generateAccessToken(payload: TokenPayload): string {
-  const options: SignOptions = { expiresIn: '15m' };
+  const options: SignOptions = { expiresIn: '24h' };
   return jwt.sign(payload, process.env.JWT_SECRET!, options);
 }
 
 export function generateRefreshToken(userId: string): string {
-  const options: SignOptions = { expiresIn: '30d' };
+  const options: SignOptions = { expiresIn: '7d' };
   return jwt.sign({ userId }, process.env.JWT_REFRESH_SECRET!, options);
 }
 
 export function generateAdminToken(payload: AdminPayload): string {
-  const options: SignOptions = { expiresIn: '15m' };
+  const options: SignOptions = { expiresIn: '24h' };
   return jwt.sign(payload, process.env.JWT_SECRET!, options);
 }
 

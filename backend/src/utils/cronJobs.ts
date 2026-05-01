@@ -39,7 +39,7 @@ export function startCronJobs() {
     }
   }, 30000);
 
-  console.log(`[CRON] Monitor corriendo con intervalo configurable`);
+  console.log('[CRON] Monitor corriendo con intervalo configurable');
 
   cron.schedule('0 10 * * *', async () => {
     try {

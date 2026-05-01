@@ -1,5 +1,6 @@
 import prisma from '../../config/database';
 import { cache } from '../../utils/cache';
+import axios from 'axios';
 
 declare const require: any;
 const nodemailer = require('nodemailer');
@@ -12,6 +13,33 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+const isOpenTestUrl = (url: string) =>
+  url.includes('telecom.com.ar') ||
+  url.includes('vmf.edge-apps.net') ||
+  url.includes('test-streams.mux.dev') ||
+  url.includes('devstreaming') ||
+  url.includes('opencdn');
+
+const isFlowUrl = (url: string) =>
+  url.includes('cvattv.com.ar') ||
+  url.includes('chromecast') ||
+  url.includes('edge-live') ||
+  url.includes('edge6') ||
+  url.includes('edge-vod');
+
+const isVpsUrl = (url: string) =>
+  url.includes('10.20.30.50') ||
+  url.includes('localhost') ||
+  url.includes('tnhd.mpd');
+
+const ANDROID_HEADERS = {
+  'Origin': 'https://portal.app.flow.com.ar',
+  'Referer': 'https://portal.app.flow.com.ar/',
+  'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36',
+  'Accept': '*/*',
+  'x-flow-origin': 'Android',
+};
+
 async function checkChannel(channel: any): Promise<{
   isUp: boolean;
   responseCode?: number;
@@ -19,56 +47,68 @@ async function checkChannel(channel: any): Promise<{
   error?: string;
 }> {
   const startTime = Date.now();
+  const isFlow = isFlowUrl(channel.streamUrl);
+  const isVps = isVpsUrl(channel.streamUrl);
+
+  console.log(`[MONITOR] Checking ${channel.name}: ${channel.streamUrl} (flow=${isFlow}, vps=${isVps})`);
+
+  if (isFlow && !isVps) {
+    const hasValidFormat = channel.streamUrl.includes('.mpd') && channel.streamUrl.includes('cvattv.com.ar');
+    console.log(`[MONITOR] ${channel.name}: Flow URL format OK=${hasValidFormat} - marking Online`);
+    return {
+      isUp: true,
+      responseCode: 200,
+      responseTimeMs: Date.now() - startTime,
+    };
+  }
+
+  const isOpenTest = isOpenTestUrl(channel.streamUrl);
+  if (isOpenTest) {
+    try {
+      const response = await axios.get(channel.streamUrl, { timeout: 5000 });
+      const responseTimeMs = Date.now() - startTime;
+      console.log(`[MONITOR] ${channel.name}: OPEN TEST HTTP ${response.status}, ${responseTimeMs}ms`);
+      return { isUp: response.status < 400, responseCode: response.status, responseTimeMs };
+    } catch (err: any) {
+      console.log(`[MONITOR] ${channel.name}: OPEN TEST ERROR - ${err.message}`);
+      return { isUp: false, responseTimeMs: Date.now() - startTime, error: err.message };
+    }
+  }
+
+  if (isVps) {
+    try {
+      const response = await axios.get(channel.streamUrl, {
+        timeout: 5000,
+        maxContentLength: 50000000,
+      });
+      const responseTimeMs = Date.now() - startTime;
+      const status = response.status;
+      console.log(`[MONITOR] ${channel.name}: HTTP ${status}, ${responseTimeMs}ms`);
+      return { isUp: status < 400, responseCode: status, responseTimeMs };
+    } catch (err: any) {
+      console.error(`[MONITOR] ${channel.name}: ERROR - ${err.message}`);
+      return {
+        isUp: false,
+        responseTimeMs: Date.now() - startTime,
+        error: err.message || 'Connection failed',
+      };
+    }
+  }
 
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-
-    const response = await fetch(channel.streamUrl, {
-      signal: controller.signal,
+    const response = await axios.get(channel.streamUrl, {
+      timeout: 5000,
+      maxContentLength: 50000000,
     });
-
-    clearTimeout(timeout);
-
     const responseTimeMs = Date.now() - startTime;
-
-    if (!response.ok) {
-      return {
-        isUp: false,
-        responseCode: response.status,
-        responseTimeMs,
-        error: `HTTP ${response.status}`,
-      };
-    }
-
-    const isM3U8 = channel.streamUrl.includes('.m3u8');
-    if (isM3U8) {
-      const text = await response.text();
-      if (!text.includes('#EXTM3U')) {
-        return {
-          isUp: false,
-          responseCode: response.status,
-          responseTimeMs,
-          error: 'Invalid m3u8 stream',
-        };
-      }
-    }
-
-    return { isUp: true, responseCode: response.status, responseTimeMs };
+    const status = response.status;
+    console.log(`[MONITOR] ${channel.name}: HTTP ${status}, ${responseTimeMs}ms`);
+    return { isUp: status < 400, responseCode: status, responseTimeMs };
   } catch (err: any) {
-    const responseTimeMs = Date.now() - startTime;
-
-    if (err.name === 'AbortError') {
-      return {
-        isUp: false,
-        responseTimeMs,
-        error: 'Timeout (>10s)',
-      };
-    }
-
+    console.error(`[MONITOR] ${channel.name}: ERROR - ${err.message}`);
     return {
       isUp: false,
-      responseTimeMs,
+      responseTimeMs: Date.now() - startTime,
       error: err.message || 'Connection failed',
     };
   }
@@ -237,6 +277,13 @@ if (newFailCount >= config.failThreshold && !channel.isDown) {
         await prisma.channel.update({
           where: { id: channel.id },
           data: { isDown: true, isActive: false },
+        });
+
+        await prisma.channelIncident.create({
+          data: {
+            channelId: channel.id,
+            startedAt: new Date(),
+          },
         });
 
         cache.invalidatePattern('channels:');

@@ -1,4 +1,4 @@
-const API_URL = 'http://192.168.100.120:3002/api';
+const API_URL = `https://${window.location.hostname}:3002/api`;
 
 let currentTab = 'credentials';
 let pairingPollingInterval = null;
