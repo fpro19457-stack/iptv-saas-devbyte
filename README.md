@@ -53,7 +53,7 @@ npx serve --port 3000
 
 ### Admin
 - Usuario: `admin`
-- Contraseña: `admin123`
+- Contraseña: `admin123` (configurable via `ADMIN_INITIAL_PASSWORD`)
 
 ### Clientes
 | Usuario | Contraseña | Estado |
@@ -128,16 +128,16 @@ iptv-saas-devbyte/
 ## 🔧 Variables de entorno (Backend)
 
 ```env
-DATABASE_URL="postgresql://postgres:45251462@localhost:5432/iptv_devbyte"
-JWT_SECRET="tu_secret_largo"
-JWT_REFRESH_SECRET="otro_secret_largo"
+DATABASE_URL="postgresql://postgres:<TU_PASSWORD>@localhost:5432/<TU_DB>"
+JWT_SECRET="tu_secret_largo_aqui"
+JWT_REFRESH_SECRET="otro_secret_largo_aqui"
 JWT_EXPIRES_IN="15m"
 JWT_REFRESH_EXPIRES_IN="30d"
 PORT=3002
 ADMIN_INITIAL_PASSWORD="admin123"
 MAX_SESSIONS_DEFAULT=2
 NODE_ENV="development"
-ALLOWED_ORIGINS="http://localhost:3000,http://localhost:3003"
+ALLOWED_ORIGINS="http://localhost:3000,http://localhost:5173"
 ```
 
 ---
